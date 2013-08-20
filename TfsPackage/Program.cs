@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Collections.Generic;
 using CommandLine;
+using log4net.Config;
 
 namespace TfsPackage
 {
@@ -34,15 +35,17 @@ namespace TfsPackage
 
         static public void Main(string[] args)
         {
+            XmlConfigurator.Configure();
+
             var options = new Options();
             Parser.Default.ParseArguments(args, options);
             if (string.IsNullOrEmpty(options.Root))
                 options.Root = Environment.CurrentDirectory;
 
-            var changesets = ParseChangesets(options.Changesets);
+            IEnumerable<int> changesets = ParseChangesets(options.Changesets);
             var packager = new ElPackager(options.Root, changesets);
 
-            var exclude = options.Exclude;
+            string exclude = options.Exclude;
             if (exclude != string.Empty)
             {
                 packager.ExcludedItems = exclude.Contains(",")

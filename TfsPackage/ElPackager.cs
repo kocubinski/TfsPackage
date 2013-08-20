@@ -7,11 +7,14 @@ using ICSharpCode.SharpZipLib.Core;
 using ICSharpCode.SharpZipLib.Zip;
 using Microsoft.TeamFoundation.Client;
 using Microsoft.TeamFoundation.VersionControl.Client;
+using log4net;
 
 namespace TfsPackage
 {
     public class ElPackager
     {
+        private static readonly ILog Log = LogManager.GetLogger(typeof (ElPackager));
+
         public const string TfsUrl = "http://dim10:8080/tfs/DefaultCollection";
 
         private readonly string _root;
@@ -64,7 +67,7 @@ namespace TfsPackage
             Console.WriteLine("Processing changeset " + cs.ChangesetId);
             foreach (var change in cs.Changes)
             {
-                var item = change.Item;
+                Item item = change.Item;
                 if (!VerifyBackup(item, change))
                     continue;
 
@@ -132,8 +135,12 @@ namespace TfsPackage
             foreach (var change in changeset.Changes)
             {
                 var item = change.Item;
+                Log.DebugFormat("Processing change for {0}", item.ServerItem);
                 if (!VerifyChange(item, change))
+                {
+                    Log.DebugFormat("VerifyChange returned false, skipping {0}", item.ServerItem);
                     continue;
+                }
 
                 var localPath = _workspace.GetLocalItemForServerItem(item.ServerItem);
 
