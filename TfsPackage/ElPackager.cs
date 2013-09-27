@@ -120,6 +120,20 @@ namespace TfsPackage
             Console.WriteLine();
         }
 
+        public void BuildDeleteScript(string deployDir)
+        {
+            var toDelete = _changesets
+                .SelectMany(changeset => _vc.GetChangeset(changeset).Changes,
+                            (changeset, change) => _workspace.GetLocalItemForServerItem(change.Item.ServerItem))
+                .Where(localPath => !File.Exists(localPath) && localPath.Contains(_root))
+                .Select(localPath => deployDir.TrimEnd('\\') + "\\" + localPath.Substring(_root.Length).TrimStart('\\'))
+                .ToList();
+
+            if (toDelete.Any())
+                File.WriteAllLines(string.Format("{0}_delete.bat", ChangesetString),
+                                   toDelete.Select(p => string.Format("del {0}", p)));
+        }
+
         bool VerifyChange(Item item, Change change)
         {
             return

@@ -56,7 +56,11 @@ namespace TfsPackage
             if (!string.IsNullOrEmpty(options.Backup))
                 packager.ZipBackup(options.Backup);
 
+            if (!string.IsNullOrEmpty(options.Backup))
+                packager.BuildDeleteScript(options.Backup);
+
             packager.ZipChangesets();
+
 
             if (packager.VerifyBackup(options.Backup))
             {
