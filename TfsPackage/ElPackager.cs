@@ -81,10 +81,14 @@ namespace TfsPackage
                 if (entryName == null)
                     continue;
 
+                // support for .refresh files, grab the actual dll
+                if (entryName.EndsWith(".refresh"))
+                    entryName = entryName.Substring(0, entryName.Length - ".refresh".Length);
+
                 var filename = backupDir + "\\" + entryName;
 
                 if (!File.Exists(filename))
-                    // we may arrive her if the ChangeType == Merge and its actually an Add operation. 
+                    // we may arrive here if the ChangeType == Merge and its actually an Add operation. 
                     // damn you TFS.
                     continue;
 
@@ -93,7 +97,7 @@ namespace TfsPackage
                 var entry = new ZipEntry(entryName);
                 zip.PutNextEntry(entry);
                 var buffer = new byte[4096];
-                using (var sr = File.OpenRead(filename))
+                using (FileStream sr = File.OpenRead(filename))
                     StreamUtils.Copy(sr, zip, buffer);
 
                 _backedupItems.Add(item.ServerItem);
@@ -143,6 +147,15 @@ namespace TfsPackage
                 !change.ChangeType.HasFlag(ChangeType.Delete);
         }
 
+        private Stream GetStreamFromItem(Item item)
+        {
+            var stream = item.DownloadFile();
+            if (!item.ServerItem.EndsWith(".refresh"))
+                return stream;
+            string path = new StreamReader(stream).ReadToEnd().TrimEnd('\r', '\n');
+            return new FileStream(path, FileMode.Open);
+        }
+
         void BuildChangesetZip(ZipOutputStream zip, Changeset changeset)
         {
             Console.WriteLine("Processing changeset " + changeset.ChangesetId);
@@ -162,11 +175,16 @@ namespace TfsPackage
                 if (localPath.Contains(_root))
                     entryName = localPath.Substring(_root.Length).TrimStart('\\');
                 if (entryName == null || item.ItemType != ItemType.File)
+                {
+                    Log.DebugFormat("Skipping {0}", item.ServerItem);
                     continue;
+                }
+                if (entryName.EndsWith(".refresh"))
+                    entryName = entryName.Substring(0, entryName.Length - ".refresh".Length);
 
                 Console.WriteLine("Packing " + entryName);
 
-                var fileStream = item.DownloadFile();
+                Stream fileStream = GetStreamFromItem(item);
                 var entry = new ZipEntry(entryName);
                 zip.PutNextEntry(entry);
                 var buffer = new byte[4096];
