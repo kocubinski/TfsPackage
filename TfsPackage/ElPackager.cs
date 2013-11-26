@@ -18,8 +18,7 @@ namespace TfsPackage
         public const string TfsUrl = "http://dim10:8080/tfs/DefaultCollection";
 
         private readonly string _root;
-        private readonly IEnumerable<int> _changesets;
-        private readonly VersionControlServer _vc;
+        private readonly TfsChangesets _changesets;
         private readonly Workspace _workspace;
 
         private readonly IList<string> _addedItems  = new List<string>();
@@ -33,23 +32,15 @@ namespace TfsPackage
                    ExcludedItems.Any(s => item.ServerItem.Contains(s));
         }
 
-        private string ChangesetString
-        {
-            get
-            {
-                string res = _changesets.First().ToString();
-                res = _changesets.Skip(1).Aggregate(res, (c, changeset) => c + ("_" + changeset));
-                return res;
-            }
-        }
-
-        public ElPackager(string root, IEnumerable<int> changesets)
+        public ElPackager(string root, TfsChangesets changesets)
         {
             _root = root;
-            _changesets = changesets.OrderByDescending(i => i);
             var tpc = new TfsTeamProjectCollection(new Uri(TfsUrl));
-            _vc = tpc.GetService<VersionControlServer>();
-            _workspace = _vc.GetWorkspace(root);
+            var vc = tpc.GetService<VersionControlServer>();
+            _workspace = vc.GetWorkspace(root);
+            var serverFolder = _workspace.GetServerItemForLocalItem(root);
+            changesets.LoadChangesets(vc, serverFolder);
+            _changesets = changesets;
         }
 
         bool VerifyBackup(Item item, Change change)
@@ -108,7 +99,7 @@ namespace TfsPackage
 
         public void ZipBackup(string backupDir)
         {
-            var archiveName = ChangesetString + "_rollback.zip";
+            var archiveName = _changesets + "_rollback.zip";
             var fsOut = File.Create(archiveName);
             Console.WriteLine("Creating backup archive " + archiveName + "...");
             var zip = new ZipOutputStream(fsOut);
@@ -116,7 +107,7 @@ namespace TfsPackage
 
             foreach (var changeset in _changesets)
             {
-                BuildBackupZip(zip, _vc.GetChangeset(changeset), backupDir);
+                BuildBackupZip(zip, changeset, backupDir);
             }
 
             zip.IsStreamOwner = true;
@@ -127,14 +118,14 @@ namespace TfsPackage
         public void BuildDeleteScript(string deployDir)
         {
             var toDelete = _changesets
-                .SelectMany(changeset => _vc.GetChangeset(changeset).Changes,
+                .SelectMany(changeset => changeset.Changes,
                             (changeset, change) => _workspace.GetLocalItemForServerItem(change.Item.ServerItem))
                 .Where(localPath => !File.Exists(localPath) && localPath.Contains(_root))
                 .Select(localPath => deployDir.TrimEnd('\\') + "\\" + localPath.Substring(_root.Length).TrimStart('\\'))
                 .ToList();
 
             if (toDelete.Any())
-                File.WriteAllLines(string.Format("{0}_delete.bat", ChangesetString),
+                File.WriteAllLines(string.Format("{0}_delete.bat", _changesets),
                                    toDelete.Select(p => string.Format("del {0}", p)));
         }
 
@@ -198,7 +189,7 @@ namespace TfsPackage
 
         public void ZipChangesets()
         {
-            var archiveName = ChangesetString + ".zip";
+            var archiveName = _changesets + ".zip";
             var fsOut = File.Create(archiveName);
             Console.WriteLine("Creating deploy archive " + archiveName + "...");
             var zip = new ZipOutputStream(fsOut);
@@ -206,7 +197,7 @@ namespace TfsPackage
 
             foreach (var changeset in _changesets)
             {
-                BuildChangesetZip(zip, _vc.GetChangeset(changeset));
+                BuildChangesetZip(zip, changeset);
             }
 
             zip.IsStreamOwner = true;
@@ -216,7 +207,7 @@ namespace TfsPackage
         public bool VerifyBackup(string backupDir)
         {
             Console.WriteLine(Environment.NewLine + "Verifying backup integrity...");
-            var fs = File.OpenRead(ChangesetString + "_rollback.zip");
+            var fs = File.OpenRead(_changesets + "_rollback.zip");
             var zf = new ZipFile(fs);
             foreach (ZipEntry zipEntry in zf)
             {

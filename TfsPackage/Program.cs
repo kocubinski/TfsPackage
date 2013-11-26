@@ -26,12 +26,6 @@ namespace TfsPackage
             public bool Verify { get; set; }
         }
 
-        static private IEnumerable<int> ParseChangesets(string sChangesets)
-        {
-            return !sChangesets.Contains(",")
-                       ? new List<int> {int.Parse(sChangesets)}
-                       : sChangesets.Split(',').Select(int.Parse);
-        }
 
         static public void Main(string[] args)
         {
@@ -42,7 +36,7 @@ namespace TfsPackage
             if (string.IsNullOrEmpty(options.Root))
                 options.Root = Environment.CurrentDirectory;
 
-            IEnumerable<int> changesets = ParseChangesets(options.Changesets);
+            var changesets = TfsChangesets.FromString(options.Changesets);
             var packager = new ElPackager(options.Root, changesets);
 
             string exclude = options.Exclude;
@@ -65,6 +59,7 @@ namespace TfsPackage
             if (packager.VerifyBackup(options.Backup))
             {
                 Console.WriteLine("Complete!");
+                Console.ReadLine();
             }
             else
             {
